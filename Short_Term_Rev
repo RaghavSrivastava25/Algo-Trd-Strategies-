@@ -1,0 +1,79 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Function to calculate cumulative returns
+def calculate_cumulative_returns(returns):
+    return (1 + returns).cumprod()
+
+# Function to calculate Sharpe ratio
+def calculate_sharpe_ratio(returns, risk_free_rate=0.01):
+    excess_return = returns.mean() - risk_free_rate / 252
+    std_dev = returns.std()
+    return (excess_return / std_dev) * np.sqrt(252)
+
+# Function to calculate maximum drawdown
+def calculate_max_drawdown(cumulative_returns):
+    drawdowns = cumulative_returns / cumulative_returns.cummax() - 1
+    return drawdowns.min()
+
+# Define the investment universe (100 largest companies by market capitalization)
+ticker_symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "FB", "TSLA", "BRK-B", "V", "JNJ", "WMT"]  # Add 100 tickers
+
+# Fetch daily price data for these tickers
+start_date = '2010-01-01'
+end_date = '2022-12-31'
+
+data = yf.download(ticker_symbols, start=start_date, end=end_date)['Adj Close']
+
+# Calculate weekly returns
+weekly_returns = data.resample('W-FRI').last().pct_change().dropna()
+
+# Strategy setup
+# Long 10 stocks with lowest returns in the previous week
+# Short 10 stocks with highest returns in the previous week
+long_positions = pd.DataFrame(index=weekly_returns.index, columns=weekly_returns.columns)
+short_positions = pd.DataFrame(index=weekly_returns.index, columns=weekly_returns.columns)
+
+for week in weekly_returns.index[1:]:
+    # Get the previous week's returns
+    prev_week_returns = weekly_returns.loc[week - pd.DateOffset(weeks=1)]
+
+    # Find the 10 lowest performers (to go long)
+    long_stocks = prev_week_returns.nsmallest(10).index
+    long_positions.loc[week, long_stocks] = 1
+
+    # Find the 10 highest performers (to go short)
+    short_stocks = prev_week_returns.nlargest(10).index
+    short_positions.loc[week, short_stocks] = -1
+
+# Combine long and short positions
+positions = long_positions.add(short_positions, fill_value=0)
+
+# Calculate portfolio returns based on positions and weekly returns
+strategy_returns = (positions.shift(1) * weekly_returns).sum(axis=1)
+
+# Calculate cumulative returns
+cumulative_returns = calculate_cumulative_returns(strategy_returns)
+
+# Plot cumulative returns
+plt.figure(figsize=(10, 6))
+cumulative_returns.plot(label='Reversal Strategy')
+plt.xlabel('Date')
+plt.ylabel('Cumulative Returns')
+plt.title('Backtest of Reversal Strategy')
+plt.legend()
+plt.show()
+
+# Calculate Sharpe ratio
+sharpe_ratio = calculate_sharpe_ratio(strategy_returns)
+print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+
+# Calculate maximum drawdown
+max_drawdown = calculate_max_drawdown(cumulative_returns)
+print(f"Maximum Drawdown: {max_drawdown:.2f}")
+
+# Calculate annualized volatility
+volatility = strategy_returns.std() * np.sqrt(52)
+print(f"Annualized Volatility: {volatility:.2f}")

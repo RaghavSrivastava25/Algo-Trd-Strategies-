@@ -1,0 +1,68 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define function to calculate moving average
+def moving_average(series, window):
+    return series.rolling(window=window).mean()
+
+# Fetch data for SPY and VIX
+start_date = '2010-01-01'
+end_date = '2022-12-31'
+
+spy = yf.download('SPY', start=start_date, end=end_date)
+vix = yf.download('^VIX', start=start_date, end=end_date)
+
+# Calculate 20-day moving averages for SPY and VIX
+spy['20_MA'] = moving_average(spy['Close'], 20)
+vix['20_MA'] = moving_average(vix['Close'], 20)
+
+# Create a substitute for BMS (e.g., difference between SPY closing and opening prices as sentiment)
+spy['Sentiment'] = spy['Close'] - spy['Open']
+spy['Sentiment_20_MA'] = moving_average(spy['Sentiment'], 20)
+
+# Generate signals based on the strategy
+spy['Signal'] = 0
+spy.loc[(spy['Close'] > spy['20_MA']) & (vix['Close'] < vix['20_MA']) & (spy['Sentiment'] > spy['Sentiment_20_MA']), 'Signal'] = 1
+
+# Shift signals by one day to simulate real-world trading where you trade at the close of the day
+spy['Position'] = spy['Signal'].shift(1)
+
+# Calculate returns based on the signal positions
+spy['Returns'] = spy['Close'].pct_change() * spy['Position']
+
+# Calculate cumulative returns
+spy['Cumulative_Returns'] = (1 + spy['Returns']).cumprod()
+
+# Plot cumulative returns
+plt.figure(figsize=(10, 6))
+spy['Cumulative_Returns'].plot(label='Strategy Returns')
+spy['Close'].pct_change().cumsum().plot(label='Buy and Hold')
+plt.xlabel('Date')
+plt.ylabel('Cumulative Returns')
+plt.title('Backtest of Strategy')
+plt.legend()
+plt.show()
+
+# Calculate Sharpe ratio
+mean_return = spy['Returns'].mean()
+std_return = spy['Returns'].std()
+sharpe_ratio = mean_return / std_return * np.sqrt(252)
+
+print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+
+# Calculate drawdowns
+def calculate_drawdowns(cumulative_returns):
+    drawdowns = cumulative_returns / cumulative_returns.cummax() - 1
+    return drawdowns
+
+drawdowns = calculate_drawdowns(spy['Cumulative_Returns'])
+max_drawdown = drawdowns.min()
+
+print(f"Maximum Drawdown: {max_drawdown:.2f}")
+
+# Calculate annualized volatility
+volatility = spy['Returns'].std() * np.sqrt(252)
+
+print(f"Annualized Volatility: {volatility:.2f}")

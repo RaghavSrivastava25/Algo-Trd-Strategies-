@@ -1,0 +1,14 @@
+{
+  "strategy": "sma_lsa",
+  "strategy_params": {
+    "short_window": 4,
+    "long_window": 13,
+    "lookback_period": null,
+    "num_std_dev": null
+  },
+  "backtest_params": {
+    "initial_capital": 1000000,
+    "notional_per_trade": 500000
+  },
+  "commodities": null
+}
